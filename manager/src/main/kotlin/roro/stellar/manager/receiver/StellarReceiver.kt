@@ -3,28 +3,23 @@ package roro.stellar.manager.receiver
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import roro.stellar.manager.StellarSettings
-import roro.stellar.manager.adb.AdbWirelessHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import roro.stellar.manager.model.ServiceStatus
-import roro.stellar.manager.startup.service.SelfStarterService
 
 class StellarReceiver : BroadcastReceiver() {
-    private val adbWirelessHelper = AdbWirelessHelper()
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (!ServiceStatus().isRunning) {
-            val scriptModeEnabled = StellarSettings.getPreferences()
-                .getBoolean(StellarSettings.BOOT_SCRIPT_ENABLED, false)
-            if (!scriptModeEnabled) {
-                val wirelessAdbStatus = adbWirelessHelper.validateThenEnableWirelessAdb(
-                    context.contentResolver, context
-                )
-                if (wirelessAdbStatus) {
-                    val intentService = Intent(context, SelfStarterService::class.java)
-                    context.startService(intentService)
-                }
+        if (ServiceStatus().isRunning) return
+
+        val pending = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                StellarReceiverStarter.start(context, forceStart = true)
+            } finally {
+                pending.finish()
             }
         }
     }
 }
-
