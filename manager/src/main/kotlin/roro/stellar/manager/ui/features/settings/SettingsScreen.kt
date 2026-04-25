@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
 import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
@@ -114,11 +116,13 @@ import roro.stellar.manager.ui.theme.ThemeMode
 import roro.stellar.manager.ui.theme.ThemePreferences
 import roro.stellar.manager.util.EnvironmentUtils
 import roro.stellar.manager.util.PortBlacklistUtils
+import roro.stellar.manager.util.UserHandleCompat
 import roro.stellar.manager.util.update.ApkDownloader
 import roro.stellar.manager.util.update.AppUpdate
 import roro.stellar.manager.util.update.DownloadState
 import roro.stellar.manager.util.update.UpdateSource
 import roro.stellar.manager.util.update.UpdateUtils
+import java.util.concurrent.TimeUnit
 
 private const val TAG = "SettingsScreen"
 
@@ -149,9 +153,25 @@ fun SettingsScreen(
     val scope = rememberCoroutineScope()
     var currentSource by remember { mutableStateOf<UpdateSource?>(null) }
     var isServiceRunning by remember { mutableStateOf(Stellar.pingBinder()) }
+    var bootAdbStartAvailable by remember { mutableStateOf<Boolean?>(null) }
 
     LaunchedEffect(Unit) {
         isServiceRunning = withContext(Dispatchers.IO) { Stellar.pingBinder() }
+        bootAdbStartAvailable = withContext(Dispatchers.IO) { isBootAdbStartAvailable() }
+        if (bootAdbStartAvailable == false &&
+            (bootMode == StellarSettings.BootMode.BROADCAST ||
+                bootMode == StellarSettings.BootMode.ACCESSIBILITY)
+        ) {
+            applyBootMode(
+                context,
+                componentName,
+                StellarSettings.BootMode.NONE,
+                bootMode,
+                scope
+            ) {
+                bootMode = StellarSettings.BootMode.NONE
+            }
+        }
         val isRoot = withContext(Dispatchers.IO) {
             try {
                 Shell.getShell().isRoot
@@ -313,7 +333,7 @@ fun SettingsScreen(
                         title = stringResource(R.string.boot_start_callback_mode),
                         subtitle = stringResource(R.string.boot_start_callback_mode_subtitle),
                         checked = bootMode == StellarSettings.BootMode.BROADCAST,
-                        enabled = true,
+                        enabled = bootAdbStartAvailable != false,
                         onCheckedChange = { newValue ->
                             if (newValue) {
                                 applyBootMode(
@@ -337,7 +357,7 @@ fun SettingsScreen(
                         title = stringResource(R.string.accessibility_auto_start),
                         subtitle = stringResource(R.string.accessibility_auto_start_subtitle),
                         checked = bootMode == StellarSettings.BootMode.ACCESSIBILITY,
-                        enabled = true,
+                        enabled = bootAdbStartAvailable != false,
                         onCheckedChange = { newValue ->
                             if (newValue) {
                                 if (!preferences.getBoolean(StellarSettings.ACCESSIBILITY_AUTO_START_PROMPTED, false)) {
@@ -995,6 +1015,44 @@ fun SettingsScreen(
 
 private fun savePreference(key: String, value: Boolean) {
     StellarSettings.getPreferences().edit { putBoolean(key, value) }
+}
+
+private fun isBootAdbStartAvailable(): Boolean {
+    if (!Stellar.pingBinder()) return true
+    val writeSecureSettings = hasRemotePermission("android.permission.WRITE_SECURE_SETTINGS")
+    val grantRuntimePermission = hasRemotePermission("android.permission.GRANT_RUNTIME_PERMISSIONS")
+    val bootAdbPortAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ||
+        EnvironmentUtils.getAdbTcpPort() > 0
+    val commandAvailable = canExecuteCommand("id") &&
+        canExecuteCommand("getprop ro.build.version.sdk")
+    return writeSecureSettings &&
+        grantRuntimePermission &&
+        UserHandleCompat.myUserId() == 0 &&
+        bootAdbPortAvailable &&
+        commandAvailable
+}
+
+private fun hasRemotePermission(permission: String): Boolean =
+    Stellar.checkRemotePermission(permission) == PackageManager.PERMISSION_GRANTED
+
+private fun canExecuteCommand(command: String): Boolean {
+    val process = try {
+        Stellar.newProcess(arrayOf("sh", "-c", command), null, null)
+    } catch (_: Throwable) {
+        return false
+    }
+
+    return try {
+        if (!process.waitForTimeout(1500, TimeUnit.MILLISECONDS)) {
+            process.destroy()
+            false
+        } else {
+            process.exitValue() == 0
+        }
+    } catch (_: Throwable) {
+        runCatching { process.destroy() }
+        false
+    }
 }
 
 private fun applyBootMode(

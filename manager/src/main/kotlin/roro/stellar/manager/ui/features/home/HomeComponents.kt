@@ -17,13 +17,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Adb
 import androidx.compose.material.icons.filled.Cable
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.PowerSettingsNew
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Button
@@ -35,6 +38,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -43,6 +50,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import roro.stellar.manager.R
+import roro.stellar.manager.model.FeatureAvailability
+import roro.stellar.manager.model.RestrictedFeature
 import roro.stellar.manager.ui.components.ModernStatusCard
 import roro.stellar.manager.ui.theme.AppShape
 
@@ -139,6 +148,206 @@ fun InfoRow(
             color = contentColor
         )
     }
+}
+
+@Composable
+fun AdbRestrictedHintCard(
+    onViewClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = AppShape.shapes.cardLarge,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.16f),
+                        shape = AppShape.shapes.iconSmall
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.adb_restricted_hint_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = stringResource(R.string.adb_restricted_hint_message),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.78f)
+                )
+            }
+
+            Button(
+                onClick = onViewClick,
+                shape = AppShape.shapes.buttonMedium
+            ) {
+                Text(text = stringResource(R.string.view))
+            }
+        }
+    }
+}
+
+@Composable
+fun RestrictedFeatureList(
+    features: List<FeatureAvailability>
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        if (features.isEmpty()) {
+            Text(
+                text = stringResource(R.string.no_restricted_features),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            features.forEach { feature ->
+                RestrictedFeatureRow(feature)
+            }
+        }
+    }
+}
+
+@Composable
+private fun RestrictedFeatureRow(
+    feature: FeatureAvailability
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val expandable = !feature.available && feature.children.isNotEmpty()
+    val statusColor = if (feature.available) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.error
+    }
+    val statusText = if (feature.available) {
+        stringResource(R.string.feature_status_available)
+    } else {
+        stringResource(R.string.feature_status_restricted)
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (expandable) Modifier.clickable { expanded = !expanded } else Modifier),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = if (feature.available) Icons.Default.CheckCircle else Icons.Default.Error,
+                contentDescription = null,
+                tint = statusColor,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = stringResource(feature.feature.titleRes()),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = statusText,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = statusColor
+            )
+            if (expandable) {
+                Icon(
+                    imageVector = if (expanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = expanded && expandable,
+            enter = expandVertically() + fadeIn(),
+            exit = shrinkVertically() + fadeOut()
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 32.dp, top = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                feature.children.forEach { child ->
+                    RestrictedFeatureChildRow(child)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RestrictedFeatureChildRow(
+    feature: FeatureAvailability
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.Error,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(16.dp)
+        )
+        Text(
+            text = stringResource(feature.feature.titleRes()),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = stringResource(R.string.feature_status_restricted),
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.error
+        )
+    }
+}
+
+private fun RestrictedFeature.titleRes(): Int = when (this) {
+    RestrictedFeature.TERMINAL_COMMAND -> R.string.feature_terminal_command
+    RestrictedFeature.SHELL_ID_COMMAND -> R.string.feature_shell_id_command
+    RestrictedFeature.PROPERTY_READ_COMMAND -> R.string.feature_property_read_command
+    RestrictedFeature.SETTINGS_READ_COMMAND -> R.string.feature_settings_read_command
+    RestrictedFeature.PACKAGE_LIST_COMMAND -> R.string.feature_package_list_command
+    RestrictedFeature.SERVICE_LIST_COMMAND -> R.string.feature_service_list_command
+    RestrictedFeature.PROCESS_LIST_COMMAND -> R.string.feature_process_list_command
+    RestrictedFeature.FILESYSTEM_READ_COMMAND -> R.string.feature_filesystem_read_command
+    RestrictedFeature.SELINUX_STATUS_COMMAND -> R.string.feature_selinux_status_command
+    RestrictedFeature.APPOPS_MANAGE -> R.string.feature_appops_manage
+    RestrictedFeature.RUNTIME_PERMISSION_MANAGE -> R.string.feature_runtime_permission_manage
+    RestrictedFeature.SECURE_SETTINGS_WRITE -> R.string.feature_secure_settings_write
+    RestrictedFeature.BOOT_ADB_START -> R.string.feature_boot_adb_start
 }
 
 @Composable

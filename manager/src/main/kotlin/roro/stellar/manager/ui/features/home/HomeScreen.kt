@@ -58,6 +58,7 @@ fun HomeScreen(
 
     var showPowerDialog by remember { mutableStateOf(false) }
     var showAdbCommandDialog by remember { mutableStateOf(false) }
+    var showAdbRestrictedFeaturesDialog by remember { mutableStateOf(false) }
 
     val gridColumns = screenConfig.gridColumns
 
@@ -91,6 +92,14 @@ fun HomeScreen(
                     apiVersion = serviceStatus?.apiVersion ?: 0,
                     onStopClick = { showPowerDialog = true }
                 )
+            }
+
+            if (isRunning && serviceStatus?.permission != true) {
+                item(span = { GridItemSpan(gridColumns) }) {
+                    AdbRestrictedHintCard(
+                        onViewClick = { showAdbRestrictedFeaturesDialog = true }
+                    )
+                }
             }
 
             if (isPrimaryUser) {
@@ -172,6 +181,20 @@ fun HomeScreen(
                 text = Starter.adbCommand,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+
+    if (showAdbRestrictedFeaturesDialog) {
+        StellarDialog(
+            onDismissRequest = { showAdbRestrictedFeaturesDialog = false },
+            title = stringResource(R.string.adb_restricted_features_title),
+            confirmText = stringResource(R.string.close),
+            onConfirm = { showAdbRestrictedFeaturesDialog = false },
+            showDismissButton = false
+        ) {
+            RestrictedFeatureList(
+                features = serviceStatus?.featureStates ?: emptyList()
             )
         }
     }
